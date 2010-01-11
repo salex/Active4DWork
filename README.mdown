@@ -1,0 +1,46 @@
+Read Me
+=======
+
+This repository is a collection of Active4d code, either in libraries or circuits/scripts, that *may* be of use to other Active4D users.
+
+*May* is emphasized because some of the code was designed to handle specific applications that may not be of use to everyone. Some of the code
+may also be experimental e.g., not fully tested for all scenarios. Since I really don't know how to use github works at this point, 
+if someone is interested in a chuck of code maybe they can make improvements to that code.
+
+I'll start off with two simple projects.
+
+1. Circuits.html2pdf
+	
+	This is a code fragment that demonstrates how to use a combination of Active4D, Applescript and Safari to convert html to pdf.
+	Either add the html2pdf to a fusebox circuit, or include html2pdf.a4d directly to run the demo.
+	The concept is fairly simple:
+	
+		*	Capture html in a variable and save it as a document.
+		*	Use "Launch External Process" to run an Applescript using osascript
+		*	The script:
+			*	Launches Safari and opens the html file
+			*	Uses UI scripting to save the page as a PDF file
+			*	Closes the window and goes to sleep
+		*	Active4D then retrieve the PDF and displays or save it.
+		
+> If you are not comfortable with having your web server running automator like tasks, this may not be for you. It sure is cheaper than
+> Prince XML or PDFLib plugin. The basis of the Applescript can be found [here](http://www.ehmac.ca/mac-ipod-help-troubleshooting/48924-applescript-code-request-print-pdf-function-2.html#post650203).
+		
+
+2. Libraries.json2.a4l
+	
+	This is a library I started about 3 years ago to implement json objects in Active4D. This was before a4d.json.a4l.
+	I ported code from ActionScript, whatever that is, to Active4D. The code basically would parse a json object into
+	an Active4D collection. It could also create a json object from a collection. The jsonStringify routine can
+	certainly be thrown away since we have a4d.json.lib - but I left it there.
+	
+	My goal for publishing this was to see if any improvements could be make to the jsonParse concept in Active4D.
+	
+	There are actually two parsers in the library.
+	
+		*	jsonParse($json) which is the ActiveScript port that parses the json text character by character.
+		*	jsonParseSimple($json) which is a shortcut I am trying to develop that uses regex to create Active4D code that can be executed.
+		
+That's all for now.
+
+Steve
