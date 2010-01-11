@@ -1,0 +1,66 @@
+<% /*
+<fusedoc fuse="html2pdf.a4d" language="Active4D" specification="2.0">
+
+This is just a test script to show how you can use Safari to generate a pdf file 
+from an html file.
+
+Step 1 -  generate your html and store in local variable $html. You can do this with an include into, save output-end save output
+for test purpose, will just include an html file.
+
+Step 2 - include the header 
+
+Step 3 - set up the paths and save the combined html file
+
+Step 4 - call Applescript
+
+Step 5 - get the pdf file and display
+
+
+</fusedoc>
+*/
+
+
+	/* Step 1 */
+	
+	include into("inc_html.html"; $html)
+	
+	/* Step 2 */
+	
+	include into("files/xhtml_header.a4d"; $html2pdf)
+	
+	text to blob($html2pdf;$ablob;3)
+	$html := "" // get rid of for dump
+	$html2pdf := "" // get rid of for dump
+	
+	/* Step 3 */
+	
+	$nPath := directory of(current path;*)
+	$htmlPath := '$nPath/files/html2pdf.html'
+	$pdfPath := '$nPath/files/html2pdf.pdf'
+	$uPath := substring($nPath;position("/";$nPath;2))
+	$scriptPath := '$uPath/html2pdf.scpt'
+	$filePath := '$uPath/files'
+	
+	delete document($pdfPath)
+	delete document($htmlPath)
+	blob to document($htmlPath;$ablob)
+
+	/* Step 4 */
+
+	$cmd := a4d.utils.choptext('osascript $scriptPath $filePath html2pdf')
+	C_TEXT(input;output)
+	execute in 4d( 'LAUNCH EXTERNAL PROCESS ("$cmd";input;output)')
+	
+	/* Step 5 */
+
+	if (output = "@success@")
+		c_blob($bblob)
+		document to blob($pdfpath;$bblob)
+		set cache control("")
+		set expires(-1)
+		write blob($bblob;"application/pdf")
+	else
+		writebr(output)
+	end if
+	
+%>

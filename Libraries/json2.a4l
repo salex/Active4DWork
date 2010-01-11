@@ -1,0 +1,690 @@
+/*
+JSON library
+
+$Id: library.a4l 3200 2007-04-18 05:15:00 salex $
+
+This is an initial version of an Active4D JSON library.
+It was adapted from an ActionScript version found at www.json.org <http://www.json.org/json.as>
+Everything is complete except for Unicode routines. Dates will proable blow up or error out.
+The Actionscript style was a little strange, lots of infinate loops relying on a break statement to get out, but it works - I think!.
+
+Since Javascript arrays can contain any data type and 4D can't. I chose to parse arrays into collections with a three
+character numeric string (e.g., "001")	
+
+Usage:
+	To convert a json string to a collection
+		json.jsonParse($jstring)
+	To convert a Collection
+		json.jsonStringify($coll;$jstring) // string must be defined before call
+	I left a test method in this version
+		json.test
+		
+*/
+
+library "json2"
+
+
+/*
+	library constructor
+*/
+
+/* Public methods */
+
+method "jsonParse"($jtext)
+	global($char;$at;$text;$len;$lev)
+	$text := $jtext
+	$char := ' '
+	$at := 1
+	$lev := 0
+	$len := length($text)
+	return(_value)
+end method
+
+method "jsonStringify"(&$arg)
+	global($lev)
+	if(undefined($lev))
+		$lev:=0
+	end if
+    $s := ""
+	$type := type($arg)
+	$stype :=string($type)
+	
+	case of
+		:(is array($type))
+			case of
+				:($stype =~ "/14|15|16|22/")
+					$jtype := "array"
+				else
+					$jtype := "undefined"
+			end case
+		:($type = 9)
+			if(is a collection($arg))
+				$jtype := "object"
+			else
+				$jtype := "number"
+			end if
+			
+		:(($type = 1) | ($type = 8))
+			$jtype := "number"
+		:($type = 6)
+			$jtype := "word"
+		:($type = 4)
+			$jtype := "date"
+		:($type = 23) 
+			if(nil($arg))
+				$jtype := "null"
+			else
+				$jtype := "number"
+			end if
+		
+		:($stype =~ "/13|20|19|23|5|30|7|3|0/")
+			$jtype := "undefined"
+		else
+			$jtype := "string"
+	end case
+	
+	case of
+		:($jtype = "object")
+			$tab := "\t"
+			for each ($arg; $key; $value)
+				$v := jsonStringify($value)
+				if ($s # "")
+					$s += ","
+				else
+					$lev++
+				end if
+				for ($i; 2; $lev)
+					$tab += $tab
+				end for
+				
+				$s += "\n"+$tab+jsonStringify($key)+":"+$v
+			end for each
+			$lev--
+			return("{"+$s+"}")
+		:($jtype = "array")
+			$tab := "\t"
+			for each ($arg; $value; $index)
+				$v := jsonStringify($value)
+				if ($s # "")
+					$s += ","
+				else
+					$lev++
+				end if
+				for ($i; 2; $lev)
+					$tab += $tab
+				end for
+				
+				$s += "\n"+$tab+$v
+			end for each
+			$lev--
+			return("["+$s+"]")
+		:($jtype = "word")
+			return(string($arg))
+		:($jtype = "date")
+			return('"!'+string($arg)+'!"')
+		:($jtype = "number")
+			return(string($arg))
+		:(($jtype = "undefined") | ($jtype = "null"))
+			return('null')
+		:($jtype = "string")
+			$s := '"'
+			for each ($arg; $char; $index)
+				if($char >= " ")
+					if (($char = "\\") | ($char = '"'))
+						$s += "\\"
+					end if
+					$s += $char
+				else
+					case of
+						:($char = "\b")
+							$s += "\\b"
+						:($char = "\f")
+							$s += "\\f"
+						:($char = "\n")
+							$s += "\\n"
+						:($char = "\r")
+							$s += "\\r"
+						:($char = "\t")
+							$s += "\\t"
+						else
+							$hex := "0123456789ABCDEF"
+							$ascii := ascii($char)
+							$hbyte := $ascii \ 16
+							$lbyte := $ascii % 16
+							$s += "\u00"+$hex[[$hbyte+1]]+$hex[[$lbyte+1]] // to hex
+					end case
+				end if
+			end for each
+			return( $s + '"')
+			
+		else
+			return('"null"')
+	end case
+end method
+
+/* Private methods */
+	
+method "_hasChar"
+	global($at;$len)
+	return(choose($at <= $len;true;false))
+end method
+
+method "_nextChar"
+	global($char;$at;$text)
+	$char := $text[[$at]]
+	$at += 1
+	return($char)
+end method
+
+method "_error"($errMsg)
+	global($at;$text)
+	$errMsg += " ("+ substring($text;1;$at)+")"
+	throw($errMsg)
+end method
+
+method "_obj"
+	global($char)
+	$o := new collection
+	
+
+	if ($char = '{') 
+		_nextChar
+		_white
+		if ($char = '}') 
+			_nextChar
+			return($o)
+		end if
+		while (_hasChar) 
+			$k := _str
+			_white
+			if ($char # ':') 
+				break
+			end if
+			_nextChar
+			$o{$k} := _value
+			_white
+			if ($char = '}') 
+				_nextChar
+				return ($o)
+			else 
+				if ($char # ',') 
+				break
+			end if
+			_nextChar
+			_white
+		end if
+	end while
+	_error("Bad object: " )
+end method
+
+method "_str"
+	global($char)
+	
+	$s := ""
+	$badChar := false
+
+	if ($char = '"') 
+		while (_hasChar ) 
+			_nextChar
+			if ($char = '"') 
+				_nextChar
+				return( $s)
+			else 
+				if ($char = '\\') 
+					_nextChar
+					case of
+						:($char = 'b')
+							$s += '\b'
+						:($char = 'f')
+							$s += '\f'
+						:($char = 'n')
+							$s += '\n'
+						:($char = 'r')
+							$s += '\r'
+						:($char = 't')
+							$s += '\t'
+						:($char = 'u')
+							$u := 0
+							$hex := "0123456789ABCDEF"
+							
+							for ($i;1;4) 
+								$t := position(_nextChar;$hex)
+								if ($t > 0)
+									$u := $u * 16 + ($t - 1)
+								else
+									$badChar := true
+									break
+								end if
+							end for
+							if($badChar) 
+								$badChar := false
+								break
+							end if
+							$s += char($u)
+						else
+							$s += $char
+					end case
+				else 
+					$s += $char
+				end if
+			end if
+		end while
+	end if
+	_error("String error: " )
+end method
+
+method "_makeArray"($type;$list)
+	$num := split string($list;";";$chunks)
+	case of
+		:($type = 1)
+			array real($arr;0)
+			for each ($chunks; $value; $index)
+				$arr{} := num($value)
+			end for each
+		:($type = 9)
+			array longint($arr;0)
+			for each ($chunks; $value; $index)
+				$arr{} := num($value)
+			end for each
+		else
+			array text($arr;0)
+			for each ($chunks; $value; $index)
+				$arr{} := $value
+			end for each
+	end case
+	
+	return($arr)
+end method
+
+method "_arr"
+	global($char)
+	$a := new collection
+	$isSame := true
+	$aa := ""
+	$key := 1
+	$vtype := -1
+	
+
+	if ($char = '[') 
+		_nextChar
+		_white
+		if ($char = ']') 
+			_nextChar
+			//writebr($aa+":"+$vtype+":"+$isSame)
+			array text($arr;0)
+			return( $arr) //empty array, make text
+		end if
+		
+		while (_hasChar ) 
+			$v := _value
+			if ($vtype = -1)
+				$vtype := type($v)
+			else
+				if ($vtype # type($v))
+					$isSame := false
+				end if
+			end if
+			$nil := false
+			if(type($v)=23)
+				if(nil($v))
+					$v := nil pointer
+					$nil := true
+				end if
+			end if
+			$a{string($key++;"i000")} := $v
+			if ($aa = "")
+				$aa += choose($nil;"nil";$v)
+			else
+				$aa += ";"+choose($nil;"nil";$v)
+			end if
+			_white
+			if ($char = ']') 
+				_nextChar
+				//writebr($aa+":"+$vtype+":"+$isSame)
+				if ($isSame)
+					return(_makeArray($vtype;$aa))
+				else
+					return( $a) //mixed arrary converted to collection
+				end if
+			else 
+				if ($char # ',')
+					break
+				end if
+			end if
+			_nextChar
+			_white
+		end while
+	end if
+	_error("Bad array: ")
+end method
+
+method "_date"
+	global($char)
+	_nextChar
+	
+	 $d := ''
+	while ($char # '!') 
+		$d += $char
+		_nextChar
+	end while
+	_nextChar
+	return(date($d))
+end method
+
+method "_numb"
+	global($char)
+	
+	 $n := ''
+
+	if ($char = '-') 
+		$n := '-'
+		_nextChar
+	end if
+	while (($char >= '0') & ($char <= '9')) 
+		$n += $char
+		_nextChar
+	end while
+	if ($char = '.')
+		$n += '.'
+		_nextChar
+		while (($char >= '0') & ($char <= '9')) 
+			$n += $char
+			_nextChar
+		end while
+	end if
+	if (($char = 'e') | ($char = 'E')) 
+		$n += $char
+		_nextChar
+		if (($char = '-') | ($char = '+'))
+			$n += $char
+			_nextChar
+		end if
+		while (($char >= '0') & ($char <= '9')) 
+			$n += $char
+			_nextChar
+		end while
+	end if
+	$v := Num($n)
+	//if (!isFinite(v)) {
+	//	_error("Bad number")
+	//}
+	return( $v)
+end method
+
+method "_word"
+	global($char)
+
+	case of
+		:($char = "t")	
+			if ((_nextChar = 'r') & (_nextChar = 'u') & (_nextChar = 'e')) 
+				_nextChar
+				return( true)
+			end if
+		:($char = "f")		
+			if ((_nextChar = 'a') & (_nextChar = 'l') &	(_nextChar = 's') & (_nextChar = 'e')) 
+				_nextChar
+				return( false)
+			end if
+		:($char = "n")		
+			if ((_nextChar = 'u') & (_nextChar = 'l') &	(_nextChar = 'l')) 
+				_nextChar
+				return( nil pointer)
+			end if
+		//:($char = "!")
+		//	return(_date)
+	end case
+	
+	_error("Word error: ")
+end method
+
+method "_white" 
+	global($char)
+	while (_hasChar ) 
+		if ($char <= ' ') 
+			repeat
+				_nextChar
+				if(not(_hasChar))
+					return
+				end if
+			until ($char > ' ') 
+		end if 
+		if ($char = '/') 
+			$_nextChar := _nextChar
+			case of
+				:($_nextChar = "/")
+					while ((_nextChar # "") &($char # '\n') & ($char # '\r')) 
+					end while
+				:($_nextChar = "*")
+					_nextChar
+					while (_hasChar ) 
+						if (_hasChar ) 
+							if ($char = '*') 
+								if (_nextChar = '/') 
+									_nextChar
+									break
+								end if
+							else 
+								_nextChar
+							end if
+						else
+							_error("Unterminated comment")
+						end if
+					end while
+				else
+					_error("Syntax _error")
+			end case
+		else
+			break
+		end if
+	end while
+end method
+
+method "_value" 
+	global($char)
+	_white
+	case of
+		:($char = '{')
+			return (_obj)
+		:($char = '[')
+			return (_arr)
+		:($char = '"')
+			return (_str)
+		:($char = '-')
+			return (_numb)
+		else
+			return (choose(($char >= '0') & ($char <= '9') ; _numb ; _word))
+	}
+end method
+	
+/* jsonParseSimple methods - does not do everything, but work from a4d.json */
+method "emptyArray"
+	array text($result;0)
+	return($result)
+end method
+
+method "newArray"($list)
+	// convert semi-colon delimited list to a text or longint array (based on first element)
+	$list := trim($list)
+	$nc := $list = "new collection@"
+	if ($nc)
+		$level := 0
+		for each ($list; $char; $index)
+			case of
+				:($char = "(")
+					$level++
+				:(($char = ")") )
+					$level--
+				:(($char = ";") & ($level = 0))
+					$list[[$index]] := "|"
+			end case
+		end for each
+		$cnt := split string($list;"|";$chunks)
+		array longint($result;size of array($chunks))
+		for each ($chunks; $value; $index)
+			$ncoll := trim($value)
+			$result{$index} := execute("return ("+ $ncoll+ ")")
+		end for each
+		return($result)
+	end if
+	$cnt := split string($list;";";$chunks)
+	$test := trim($chunks{1})
+	$isText:= $test[[1]] = '"'
+	if ($isText)
+		array text($result;size of array($chunks))
+		for each ($chunks; $value; $index)
+			$result{$index} := trim(replace string($value;'"';''))
+		end for each
+	else
+		array longint($result;size of array($chunks))
+		for each ($chunks; $value; $index)
+			$result{$index} := num($value)
+		end for each
+	end if
+	return($result)
+end method
+
+method "null"
+	return(char(0))
+end method
+
+method "newDate"($date)
+	array string(3; $months; *; "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"; "Oct"; "Nov"; "Dec")
+	$date := replace string($date;",";"")
+	$cnt := split string($date;" ";$chunks)
+	$tmp := string(find in array($months;$chunks{1}))+'/$chunks{2}/$chunks{3}'
+	
+	return(date($tmp))
+end method
+
+method "elemToArray"(&$elem;&$result)
+	if (is array(type($elem)))
+		copy array($elem;$result)
+	else
+		$result{} := $elem
+	end if
+	return($result)
+end method
+
+
+method "jsonParseSimple"($json)
+	/*given a json object,convert it to an Active4D collection*/
+	// First convert any dates in IETF format to 4d date
+	$re1 := "~\"?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)( \\d\\d*, \d{4})\"~"
+	$rp1 := "newDate(\"\1\2\")"
+	regex replace($re1; $json; $rp1; $json)
+	
+	//Next, hide commas, colon, apostrophe between quotes
+	
+	$inQuote := false
+	for each ($json; $char; $index)
+		case of
+			:($char = '"')
+				$inQuote := not($inQuote)
+			:(($char = ",") & $inQuote)
+				$json[[$index]] := char(254)
+			:(($char = ":") & $inQuote)
+				$json[[$index]] := char(253)
+			:(($char = "'") & $inQuote)
+				$json[[$index]] := char(252)
+			:(($char = "\n") & not($inQuote))
+				$json[[$index]] := " "
+			:(($char = "\r") & not($inQuote))
+				$json[[$index]] := " "
+		end case
+	end for each
+	
+	//Now convert objects
+	array text($re;0) // regex array
+	array text($rp;0) // replace array
+	// set the reqex array
+	$re{} := "|:\\s*{|"  // object => convert :{ to ;new collection(
+	$re{} := "|\\[\\]|" // replace empty array with empty text array
+	$re{} := "|:\\s*\\[|" //  text or longint array  => convert :[ to ;new array1(  -- local method see above
+	$re{} := "|\\]|" // end  array => convert ] to )
+	$re{} := "|}|" // end object => convert } to )
+	$re{} := "|[:,]|" // replace comma and colon  with semi-colon
+	$re{} := "|{|" // replace begining object with new collection()
+	$re{} := "|n\\(\\)|" // replace empty collection convert n() to new n
+	//set the replacement array
+	$rp{} := ";new collection("
+	$rp{} := "emptyArray"
+	$rp{} := ";newArray( ''' "
+	$rp{} := " ''')"
+	$rp{} := ")"
+	$rp{} := ";"
+	$rp{} := "new collection("
+	$rp{} := "n"
+
+	regex replace($re; $json; $rp; $results)
+	//put commas, colon, apos back
+	$results := replace string($results;char(254);",")
+	$results := replace string($results;char(253);":")
+	$results := replace string($results;char(252);"'")
+	$collection := execute("return ("+ $results+ ")")
+	//writebr('<textarea>$results</textarea>')
+	return($collection)
+end method
+
+	
+	method "test"
+	
+		$jsontxt := """
+		{"menu": {
+				"count": 567,
+				"GlossSeeAlso": ["GML", "XML",null]// just a comment
+				/* muliti-line comment
+				kkkkjk
+				jkkjii
+				*/,
+				"id": "file",
+				"isNew" : true,
+				"offset": -54.567,
+				"break_date":"04/20/2007",
+				"popup": {
+					"menuitem": [
+						{"value": "New", "onclick": "CreateNewDoc()"},
+						{"value": "Open", "onclick": "OpenDoc()"},
+						{"value": "Close", "onclick": "CloseDoc()"}
+					]
+				},
+				"newtst" : "this is a new test",
+				"tst" : "None and a \u0051\u000a nudder line after the Q",
+				"value": "File:"
+			}
+		}
+		"""
+	
+	
+		writebr("Sample JSON String")
+		write('<pre>$jsontxt</pre>')	
+	
+		$a :=	jsonParse($jsontxt)
+		writebr("Result of parse into a collection")
+		dump collection($a)
+		$xml := ""
+		array longint($tst;0)
+		set array($tst;44;56;23;34.5) // add a real array
+		$a{"menu"}{"aa"} := $tst
+
+		dump collection($a)
+		
+		$xml :=jsonStringify($a)
+		writebr("Collection converted back to JSON String")
+		write('<pre>$xml</pre>')
+		
+		
+		$b := jsonParse($xml)
+		writebr("Did new JSON String parse okay?")
+		
+		dump collection($b)
+		$xml := ""
+		$xml := jsonStringify($b)
+		writebr("Now back to JSON String")
+	
+		write('<pre>$xml</pre>')
+		for each ($b{"menu"}{"popup"}{"menuitem"}; $value; $index)
+			a4d.debug.dump collection($value)
+		end for each
+	end method
+end library
+
