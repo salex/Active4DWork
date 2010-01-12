@@ -37,7 +37,7 @@ I'll start off with two simple projects.
 	
 	My goal for publishing this was to see if any improvements could be make to the jsonParse concept in Active4D.
 	
-	There are actually two parsers in the library.
+	There are actually two parsers in the library and one toJson method.
 	
 		*	jsonParse(json_text) => collection
 			which is the ActiveScript port that parses the json 
@@ -45,6 +45,10 @@ I'll start off with two simple projects.
 		*	jsonParseSimple(json_text) => collection
 			which is a shortcut I am trying to develop 
 			that uses regex to create Active4D code that can be executed.
+		*	jsonStringify(collection) => json_text
+			The thing that can be thrown away. One interesting thing it does do is, that
+			if it finds an arry of mixed types, it converts it to a collection with a
+			string($foo;"000") type key
 		
 That's all for now.
 
