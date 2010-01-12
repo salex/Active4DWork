@@ -4,8 +4,9 @@ Read Me
 This repository is a collection of Active4d code, either in libraries or circuits/scripts, that *may* be of use to other Active4D users.
 
 *May* is emphasized because some of the code was designed to handle specific applications that may not be of use to everyone. Some of the code
-may also be experimental e.g., not fully tested for all scenarios. Since I really don't know how to use github works at this point, 
-if someone is interested in a chuck of code maybe they can make improvements to that code.
+may also be experimental e.g., not fully tested for all scenarios. I really don't know how to use github at this point, but it seemed like a 
+good place to stick code. 
+My hope is that if someone is interested in a chuck of code, maybe they can make improvements to that code.
 
 I'll start off with two simple projects.
 
@@ -38,8 +39,12 @@ I'll start off with two simple projects.
 	
 	There are actually two parsers in the library.
 	
-		*	jsonParse($json) which is the ActiveScript port that parses the json text character by character.
-		*	jsonParseSimple($json) which is a shortcut I am trying to develop that uses regex to create Active4D code that can be executed.
+		*	jsonParse(json_text) => collection
+			which is the ActiveScript port that parses the json 
+			text character by character.
+		*	jsonParseSimple(json_text) => collection
+			which is a shortcut I am trying to develop 
+			that uses regex to create Active4D code that can be executed.
 		
 That's all for now.
 
