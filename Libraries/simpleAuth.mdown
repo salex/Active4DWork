@@ -1,0 +1,205 @@
+# Simple Authorization
+
+Simple Authorization is just what the name implies -- for Active4D.
+
+It is patterned after a ruby plug-in “Declarative-Authorization”. It is not a full implementation, but close. I also stole a few things from another ruby plug-in CanCan, that stole from Declarative-Authorization! Simple Authorization is implemented as an Active4D library auth.
+
+
+### From the declarative authorization plugin:
+
+The declarative authorization plugin offers an authorization mechanism inspired 
+by _RBAC_.  The most notable distinction to other authorization plugins is the
+declarative approach.  That is, authorization rules are not defined
+programmatically in between business logic but in an authorization configuration.
+
+
+
+### Authorization Data Model
+
+	 ----- App domain ----|-------- Authorization conf ---------|------- App domain ------
+
+	                       includes                   includes
+	                        .--.                        .---.
+	                        |  v                        |   v
+	  .------.  can_play  .------.  has_permission  .------------.  requires  .----------.
+	  | User |----------->| Role |----------------->| Permission |<-----------| Activity |
+	  '------' *        * '------' *              * '------------' 1        * '----------'
+	                                                      |
+	                                              .-------+------.
+	                                           1 /        | 1     \ *
+	                                 .-----------.   .---------.  .-----------.
+	                                 | Privilege |   | Context |  | Attribute |
+	                                 '-----------'   '---------'  '-----------'
+
+
+### Explaination of the model
+
+In the application domain, each *User* may be assigned to *Roles* that should 
+define the users' job in the application, such as _Administrator_.  On the 
+right-hand side of this diagram, application developers specify which *Permissions* 
+are necessary for users to perform activities, such as calling a controller action,
+viewing parts of a View or acting on records in the database.  Note that
+Permissions consist of an *Privilege* that is to be performed, such as _read_, 
+and a *Context* in that the Operation takes place, such as _companies_.
+
+In the authorization configuration, Permissions are assigned to Roles and Role
+and Permission hierarchies are defined.  *Attributes* may be employed to allow
+authorization according to dynamic information about the context and the
+current user, e.g. "only allow access on employees that belong to the
+current user's branch."
+
+### Simple Authorization implementation
+
+* Only Three public methods
+	* hasRole($role) => True/False
+		* simple test if session{"roles"} contains the role
+	* hasPrivOn($priv;$controller {;$attributes}) => True/False
+		* test if the user has a role that authorizes the privilege on a controller {Really any enity}
+		* main use on turning on/off buttons links
+	* isAuthorized($action;$controller;$attributes {; $exclude}) => nothing or redirects with "Unauthorized"
+		* really just a call to hasPrivOn with the redirect
+		* main use to control access to a controller
+* Uses simple tab indented text to describe roles and privileges
+
+### A simple example configuration
+	:privileges
+		read
+			includes
+				show
+				view
+				index
+				list
+		create
+			includes
+				new
+		update
+			includes
+				edit
+		delete
+			includes
+				destroy
+		manage
+			includes
+				create
+				read
+				update
+				delete
+		me
+			includes
+				read
+				update
+				register
+		manage_project
+			includes
+				create
+				read
+				update
+	:roles
+		guest
+			permissions_on
+				users
+					login
+					logout
+				citizens
+					register
+				employees
+					register
+		citizen
+			permissions_on
+				citizens
+					update:(session{"user.id"} = $attributes{"id"})
+		employee
+			permissions_on
+				all
+					read:($controller !~ kExcludeEmployee )
+				employees
+					read
+					me:(session{"user.id"} = $attributes{"id"})
+				projects
+					read
+					manage_project:(auth.hasRole("project_manager"))
+		project_manager
+			permissions_on
+				projects
+					manage_project
+				jobs
+					manage_project
+		dbadmin
+			permissions_on
+				all
+					manage
+
+Privileges, in the simplest form are CRUD actions, but that does not give you much so you add user defined names
+such as "manage". This is somewhat hierarchical in that a privilege can include another privilege.
+
+Roles are assigned the the users file as a list and put into a session array session{"user.roles"}. Roles 
+than define what privileges that role has on a controller/model/whatever.
+
+* Privileges in the roles area has a few features
+	* the keyword *all* is a wildcard that applies to all controllers
+	* the privilege can contain an optional boolean condition
+		* Citizen can only update their record
+		* Employee can only update their record
+		* Employee can read everything except what is defined in an excluded list
+
+
+
+### The above configuration is parsed and placed into the library "self" collection as a global self{"_auth"}
+
+	A painful recreation of  an a4d.debug.dump.collection($auth)!
+	Roles and Privileges
+	privileges
+	  Key            Value
+	  create         [0] {"", "create", "new"}
+	  delete         [0] {"", "delete", "destroy"}
+	  manage         [0] {"", "manage", "create", "new", "read", "show", "view", "index", 
+	                    "list", "update", "edit", "delete", "destroy"}
+	  manage_project [0] {"", "manage_project", "create", "new", "read", "show", "view",
+	                    "index", "list", "update", "edit"}
+	  me             [0] {"", "me", "read", "show", "view", "index", "list", "update",
+	                    "edit", "register"}
+	  read           [0] {"", "read", "show", "view", "index", "list"}
+	  update         [0] {"", "update", "edit"}
+
+	roles
+	  Key            Value
+	  citizen
+	     Key              Value
+	     citizens         [0] {"", "update"}
+	     citizens:update  "(session{"user.id"} = $attributes{"id"})"
+
+	  dbadmin
+	      Key              Value
+	      all              [0] {"", "manage"}
+
+	  employee
+	     Key                      Value
+	     all                      [0] {"", "read"}
+	     all:read                 "($controller !~ kExcludeEmployee )"
+	     employees                [0] {"", "read", "me"}
+	     employees:me             "(session{"user.id"} = $attributes{"id"})"
+	     projects                 [0] {"", "read", "manage_project"}
+	     projects:manage_project  "(auth.hasRole("project_manager"))"
+
+	  guest
+	     Key            Value
+	     citizens       [0] {"", "register"}
+	     employees      [0] {"", "register"}
+	     users          [0] {"", "create", "update"}
+
+	  project_manager
+	     Key            Value
+	     jobs           [0] {"", "manage_project"}
+	     projects       [0] {"", "manage_project"}
+
+That collection is the basis on the three library calls.
+
+It is just that simple.
+
+### Constraints - there are a few
+
+* Variables used in the conditional booleans must be available, that is why $attributes is passed
+	- Don't like that, but the only way I can think of at this point.
+* This is not easy stuff, you can easily mess up. Notice that there are two ways to manage projects
+	manage\_project allows all crud except delete. I then had the project_manager role inherit *manage*
+	which allowed delete.

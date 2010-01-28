@@ -1,0 +1,360 @@
+/*
+	auth library
+	
+	$Id: library.a4l 3200 2006-05-01 21:50:46Z aparajita $
+*/
+
+library "auth"
+
+/* 
+You can define contant list that can be used in the optional boolean
+conditions. This uses a regex or list
+*/
+
+define(kExcludeEmployee; "/(webusers|bid|buget|COA|drop)/i")
+
+
+/*
+	library constructor
+*/
+method "__load__"
+	if (not(collection has(self;"_auth")))
+		self{"_auth"} := new global collection
+		init
+	end if
+end method
+
+
+/*
+	library destructor
+*/
+method "__unload__"
+	_unload
+end method
+
+method "_unload"
+	if (collection has(self;"_auth"))
+		if (is a collection(self{"_auth"}))
+			deep clear collection(self{"_auth"})
+		else
+			delete collection item(self;"_auth")
+		end if
+	end if
+end method
+
+/* probably should be private method */
+method "init"
+	//include into("/rest/auth_config.text";$config)
+/* The config variable is a simple tab indented list	
+	It has two sections Privileges and Roles 
+		Privileges are realy actions, patterned after CRUD. You can define your own actions and map them to CRUD  
+		Roles are user defined names that define what privileges are need for what controllers
+		Roles can define a conditinal condition on a controller. It must be an executable string that returns a boolean.
+		variables must also be available. Either session,  passed in a collections (e.g. $attributes) or a global collection.
+		The controller "all" will give that permission on any action/controller. All can be delared with a condition, say to 
+		have read permission on oll controlers except a, b and c.
+		*/	
+	
+$config := """
+:privileges
+	read
+		includes
+			show
+			view
+			index
+			list
+	manage
+		includes
+			create
+			read
+			update
+			delete
+	create
+		includes
+			new
+	update
+		includes
+			edit
+	delete
+		includes
+			destroy
+	me
+		includes
+			read
+			update
+			register
+	manage_project
+		includes
+			create
+			read
+			update
+:roles
+	guest
+		permissions_on
+			users
+				create
+				update
+			citizens
+				register
+			employees
+				register
+	citizen
+		permissions_on
+			citizens
+				update:(session{"user.id"} = $attributes{"id"})
+	employee
+		permissions_on
+			all
+				read:($controller !~ kExcludeEmployee )
+			employees
+				read
+				me:(session{"user.id"} = $attributes{"id"})
+			projects
+				read
+				manage_project:(auth.hasRole("project_manager"))
+	project_manager
+		permissions_on
+			projects
+				manage_project
+			jobs
+				manage_project
+	dbadmin
+		permissions_on
+			all
+				manage
+
+"""
+	$config := trim($config)
+	$count := regex split("|^\:|m";$config;$keyitems; 0; A4D Regex Split No Empty)
+	for each ($keyitems; $value; $index)
+		array text($lines;0)
+		$cnt := split string($value;"\n";$lines)
+		$key := trim($lines{1})
+		case of
+			:($key = "roles")
+				_roles($lines)
+			:($key = "privileges")
+				_privileges($lines)
+			else
+			//	writebr("undefined key")
+			
+		end case
+	
+	end for each
+
+end method
+
+method "isAuthorized"($action;$controller;$attributes;$exclude="")
+	if ($exclude)
+		if ($action =~ '/$exclude/i')
+			return
+		end if
+	end if
+	$can := auth.hasPrivOn($action;$controller;$attributes)
+	if (not($can))
+		session{"errMsg"} := "Unauthorized Access"
+		redirect("/root/main")
+	end if
+	
+end method
+
+method "hasRole"($role)
+	if (not(collection has(self{"_auth"}{"roles"};$role)))
+		return(false)
+	end if
+	$result := $role ~ session{"user.roles"}
+	return($result)
+end method
+
+method "hasPrivOn"($priv;$controller;$attributes=0; $debug=false)
+	$found := false
+	$theController := $controller
+	for each (session{"user.roles"}; $role)
+		if (not($found) & (collection has(self{"_auth"}{"roles"}{$role};"all")))
+			/* check valid role for all first check controller if fails*/
+			$controller := $theController
+			$chkController := "all"
+		else
+			/* no all role check valid role */
+			$controller := "__none__"
+			$chkController := $theController
+		end if
+		if (collection has(self{"_auth"}{"roles"};$role)) 
+			if($debug)
+				write to console('controller $controller $chkcontroller')
+			end if
+			
+			if (collection has(self{"_auth"}{"roles"}{$role};$chkController))
+				for each (self{"_auth"}{"roles"}{$role}{$chkController}; $value; $index)
+					if($debug)
+						write to console('role $role controller $controller $chkController value = $value priv $priv')
+					end if
+					$pos := find in array(self{"_auth"}{"privileges"}{$value};$priv)					
+					if ($pos > 0)
+						if (collection has(self{"_auth"}{"roles"}{$role};$chkController+":"+$value))
+							$exec := "return("+self{"_auth"}{"roles"}{$role}{$chkController+":"+$value}+")"
+							$if := execute($exec)
+							if($debug)
+								write to console('there is an if condition on $value and if is $if')
+							end if
+							$found := choose($if;true;$found)
+						else
+							$found := true 
+						end if
+					end if
+				end for each
+				if($debug)
+					write to console('found $found')
+				end if
+				if (not($found) & (collection has(self{"_auth"}{"roles"}{$role};"all")))
+					$controller := $theController
+					$chkController := $theController
+					for each (self{"_auth"}{"roles"}{$role}{$chkController}; $value; $index)
+						if($debug)
+							write to console('role $role controller $controller $chkController value = $value priv $priv')
+						end if
+						$pos := find in array(self{"_auth"}{"privileges"}{$value};$priv)
+						if ($pos > 0)
+							if (collection has(self{"_auth"}{"roles"}{$role};$chkController+":"+$value))
+								$exec := "return("+self{"_auth"}{"roles"}{$role}{$chkController+":"+$value}+")"
+								//write to console('$controller $xcontroller')
+								$if := execute($exec)
+								if($debug)
+									write to console('there is an if condition on $value and if is $if')
+								end if
+
+								$found := choose($if;true;$found)
+							else
+								$found := true 
+							end if
+						end if
+					end for each
+				end if
+			end if
+		end if
+	end for each
+	return($found)
+end method
+
+/*Private methods*/
+
+method "_roles"(&$lines)
+	//build roles collection
+	$key := trim($lines{1})
+	self{"_auth"}{"roles"} := new global collection
+	for ($i; 2; size of array($lines))
+		$textStart := first not of($lines{$i};"\t")
+		if ($textstart = 2)
+			$role := trim(substring($lines{$i};$textstart))
+			self{"_auth"}{"roles"}{$role} := new global collection
+		end if
+		if ($textstart = 4)
+			$controller := trim(substring($lines{$i};$textstart))
+			array text($tmp;0)
+			
+			self{"_auth"}{"roles"}{$role}{$controller} := $tmp
+		end if
+		if ($textstart = 5)
+			$priv := trim(substring($lines{$i};$textstart))
+			$pos := position(":";$priv)
+			// is there a condition?
+			if ($pos > 0)
+				$cnt := split string($priv;":";$privIf)
+				$cpriv := $privIf{1}
+				$cif := $privIf{2}
+				self{"_auth"}{"roles"}{$role}{$controller}{} := $cpriv
+				self{"_auth"}{"roles"}{$role}{$controller+":"+$cpriv} := $cif
+			else
+				self{"_auth"}{"roles"}{$role}{$controller}{} := $priv
+			end if
+		end if
+	end for
+
+end method
+
+method "_privileges"(&$lines)
+	
+	$key := trim($lines{1})
+	self{"_auth"}{"privileges"} := new global collection
+	for ($i; 2; size of array($lines))
+		$textStart := first not of($lines{$i};"\t")
+		if ($textstart = 2) // get a privilege
+			$priv := trim(substring($lines{$i};$textstart))
+			self{"_auth"}{"privileges"}{$priv} := "" 
+		end if
+		if ($textstart = 4) // add an action as a list
+			$action := trim(substring($lines{$i};$textstart))
+			self{"_auth"}{"privileges"}{$priv} += $action+"|"
+		end if
+	end for
+	for each (self{"_auth"}{"privileges"}; $key; $value)
+		$cnt := split string($value;"|";$chunks)
+		$actions := ""
+		// expand any includes that have been defined
+		for each ($chunks; $action; $index)
+			$actions += $action+"|"
+			if (collection has(self{"_auth"}{"privileges"};$action))
+				$actions += self{"_auth"}{"privileges"}{$action}
+			end if
+		end for each
+		self{"_auth"}{"privileges"}{$key} :=$actions
+	end for each
+	// convert expanded list to array
+	for each (self{"_auth"}{"privileges"}; $key; $value)
+		array text($tmp;0)
+		$tmp{} := $key
+		$cnt := split string($value;"|";$priv)
+		for each ($priv; $value; $index)
+			$tmp{} := $value
+		end for each
+		self{"_auth"}{"privileges"}{$key} := $tmp
+	end for each
+end method
+
+method "test"
+	writebr("<h3>Test of example roles/priviliges</h3>")
+	auth.init
+	delete session item("user.roles")
+	writebr("""Set up a session roles:  $num := split string("employee|project_manager";"|";session{"user.roles"})""")
+	$num := split string("employee|project_manager";"|";session{"user.roles"})
+	writebr("""Set up a session user.id:  session{"user.id"} := 999 """)
+	session{"user.id"} := 999
+	writebr("""Set up $attributes:  new collection("id" ; 999) """)
+	$attributes := new collection("id" ; 999)
+	a4d.debug.dump collection($attributes)
+	a4d.debug.dump session
+	
+	writebr("Simple hasRole calls")
+	writebr("""auth.hasRole("project_manager") -> """ + auth.hasRole("project_manager"))
+	writebr("""auth.hasRole("citizen") -> """ + auth.hasRole("citizen"))
+	writebr("""auth.hasRole("dummy") -> """ + auth.hasRole("dummy"))
+	writebr("Some hasPrivOn calls")
+	writebr("""auth.hasPrivOn("index";"bid";$attributes) -> """+auth.hasPrivOn("index";"bid";$attributes))
+	writebr("""auth.hasPrivOn("read";"citizens";$attributes) -> """+auth.hasPrivOn("read";"citizens";$attributes))
+	writebr("""auth.hasPrivOn("edit";"employees";$attributes) -> """+auth.hasPrivOn("edit";"employees";$attributes))
+	writebr("""Change id $attributes:  new collection("id" ; 998) """)
+	$attributes := new collection("id" ; 998)
+	a4d.debug.dump collection($attributes)	
+	writebr("""auth.hasPrivOn("edit";"employees";$attributes) -> """+auth.hasPrivOn("edit";"employees";$attributes))
+	writebr("""auth.hasPrivOn("edit";"projects";$attributes) -> """+auth.hasPrivOn("edit";"projects";$attributes))
+	writebr("""auth.hasPrivOn("delete";"projects";$attributes) -> """+auth.hasPrivOn("delete";"projects";$attributes))
+	writebr("""Add dbadmin session role:  $num := split string("employee|project_manager|dbadmin";"|";session{"user.roles"})""")
+	delete session item("user.roles")
+	$num := split string("employee|project_manager|dbadmin";"|";session{"user.roles"})
+	a4d.debug.dump session
+	writebr("""auth.hasPrivOn("delete";"projects";$attributes) -> """+auth.hasPrivOn("delete";"projects";$attributes))
+	writebr("""auth.hasPrivOn("index";"bid";$attributes) -> """+auth.hasPrivOn("index";"bid";$attributes))
+	
+	
+	auth.dump
+	
+	
+end method
+
+method "dump"
+	a4d.debug.dump collection(self;"Roles and Privileges")
+end method
+
+
+end library
+

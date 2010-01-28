@@ -8,7 +8,7 @@ may also be experimental e.g., not fully tested for all scenarios. I really don'
 good place to stick code. 
 My hope is that if someone is interested in a chuck of code, maybe they can make improvements to that code.
 
-I'll start off with two simple projects.
+I'll start off with three simple projects.
 
 1. Circuits.html2pdf
 	
@@ -24,8 +24,8 @@ I'll start off with two simple projects.
 			*	Closes the window and goes to sleep
 		*	Active4D then retrieve the PDF and displays or save it.
 		
-> If you are not comfortable with having your web server running automator like tasks, this may not be for you. It sure is cheaper than
-> Prince XML or PDFLib plugin. The basis of the Applescript can be found [here](http://www.ehmac.ca/mac-ipod-help-troubleshooting/48924-applescript-code-request-print-pdf-function-2.html#post650203).
+	> If you are not comfortable with having your web server running automator like tasks, this may not be for you. It sure is cheaper than
+	> Prince XML or PDFLib plugin. The basis of the Applescript can be found [here](http://www.ehmac.ca/mac-ipod-help-troubleshooting/48924-applescript-code-request-print-pdf-function-2.html#post650203).
 		
 
 2. Libraries.json2.a4l
@@ -49,6 +49,12 @@ I'll start off with two simple projects.
 			The thing that can be thrown away. One interesting thing it does do is, that
 			if it finds an arry of mixed types, it converts it to a collection with a
 			string($foo;"000") type key
+			
+3. Libraries.auth.a4l
+	
+	Simple Authorization is a library that implements Declarative-Authorization. See simpleAuth.mdown for more information. 
+
+
 		
 That's all for now.
 
