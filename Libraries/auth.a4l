@@ -200,7 +200,6 @@ method "hasRole"($role)
 end method
 
 method "hasPrivOn"($priv;$controller;$attributes=0; $debug=false)
-	write to console("ccshit"))
 	if (not(kRoles))
 		_unauthorized
 	end if
