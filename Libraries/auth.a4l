@@ -61,7 +61,7 @@ method "_unauthorized"($msg="")
 	redirect("/root/main")
 end method
 
-method "kRoles"
+method "xxRoles" // this did not work, have to rethink, can't pass an array might try global array'
 	if (session has("user.roles"))
 		return(session{"user.roles"})
 	else
@@ -174,9 +174,7 @@ end method
 
 method "isAuthorized"($action;$controller;$attributes=0;$exclude="")
 	// returns nothing if ok, redirects to error page if unauthorized
-	if (not(kRoles))
-		_unauthorized
-	end if
+	kCurrentUserID
 	if ($exclude) // can't remember why I added this option, maybe _action calls not cluttering config'
 		if ($action =~ '/$exclude/i')
 			return
@@ -189,24 +187,19 @@ method "isAuthorized"($action;$controller;$attributes=0;$exclude="")
 end method
 
 method "hasRole"($role)
-	if (not(kRoles))
-		_unauthorized
-	end if
+	kCurrentUserID
 	if (not(collection has(self{"_auth"}{"roles"};$role)))
 		return(false)
 	end if
-	$result := $role ~ kRoles
+	$result := $role ~ session{"user.roles"}
 	return($result)
 end method
 
 method "hasPrivOn"($priv;$controller;$attributes=0; $debug=false)
-	if (not(kRoles))
-		_unauthorized
-	end if
-
+	kCurrentUserID
 	$found := false
 	$theController := $controller
-	for each (kRoles; $role)
+	for each (session{"user.roles"}; $role)
 		if (not($found) & (collection has(self{"_auth"}{"roles"}{$role};"all")))
 			/* check valid role for all first check if controller fails*/
 			$controller := $theController
