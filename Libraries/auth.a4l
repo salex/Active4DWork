@@ -54,13 +54,29 @@ There are also constants for where your user.roles array is stored, current user
 */
 
 	define(kExcludeEmployee; "/(webusers|bid|buget|COA|drop)/i")
-	define(kRoles;'session{"user.roles"}')
-	define(kCurrentUserID;'session{"user.id"}')
 
-method "_unauthorized"
+method "_unauthorized"($msg="")
 	/* modify this method to meet your needs on an unathorized condition */
-	session{"errMsg"} := "Unauthorized Access"
+	session{"errMsg"} := "Unauthorized Access "+$msg
 	redirect("/root/main")
+end method
+
+method "kRoles"
+	if (session has("user.roles"))
+		return(session{"user.roles"})
+	else
+		_unauthorized("Not logged in")
+		exit	
+	end if
+end method
+
+method "kCurrentUserID"
+	if (session has("user.id"))
+		return(session{"user.id"})
+	else
+		_unauthorized
+		exit	
+	end if
 end method
 
 method "init"
@@ -122,7 +138,7 @@ $config := """
 				me:(kCurrentUserID = num($attributes{"id"}))
 	project_manager
 		permissions_on
-			[projects,jobs,jobstages,citizens,stage_assmnts,]
+			[projects,jobs,jobstages,citizens,stage_assmnts,applicants]
 				manage_project
 	dbadmin
 		permissions_on
@@ -184,10 +200,11 @@ method "hasRole"($role)
 end method
 
 method "hasPrivOn"($priv;$controller;$attributes=0; $debug=false)
+	write to console("ccshit"))
 	if (not(kRoles))
-		_unauthorized		
+		_unauthorized
 	end if
-	
+
 	$found := false
 	$theController := $controller
 	for each (kRoles; $role)
