@@ -120,7 +120,7 @@ current user's branch."
 					manage_project:(auth.hasRole("project_manager"))
 		project_manager
 			permissions_on
-				projects
+				[projects,jobs,jobstages,citizens,applicants]
 					manage_project
 				jobs
 					manage_project
@@ -137,6 +137,7 @@ than define what privileges that role has on a controller/model/whatever.
 
 * Privileges in the roles area has a few features
 	* the keyword *all* is a wildcard that applies to all controllers
+	* the permissions\_on list can be an array of controllers/models/names _02/23/2010_
 	* the privilege can contain an optional boolean condition
 		* Citizen can only update their record
 		* Employee can only update their record
@@ -191,6 +192,9 @@ than define what privileges that role has on a controller/model/whatever.
 	     Key            Value
 	     jobs           [0] {"", "manage_project"}
 	     projects       [0] {"", "manage_project"}
+	     jobstages      [0] {"", "manage_project"}
+	     citizens       [0] {"", "manage_project"}
+	     applicants     [0] {"", "manage_project"}
 
 That collection is the basis on the three library calls.
 
@@ -200,6 +204,7 @@ It is just that simple.
 
 * Variables used in the conditional booleans must be available, that is why $attributes is passed
 	- Don't like that, but the only way I can think of at this point.
+	- Added contants kRoles, and kCurrentUserID that allows a little more flexibility
 * This is not easy stuff, you can easily mess up. Notice that there are two ways to manage projects
-	manage\_project allows all crud except delete. I then had the project_manager role inherit *manage*
+	manage\_project allows all CRUD except delete. I then had the project_manager role inherit *manage*
 	which allowed delete.

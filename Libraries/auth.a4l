@@ -1,17 +1,9 @@
 /*
 	auth library
 	
-	$Id: library.a4l 3200 2006-05-01 21:50:46Z aparajita $
 */
 
 library "auth"
-
-/* 
-You can define contant list that can be used in the optional boolean
-conditions. This uses a regex or list
-*/
-
-define(kExcludeEmployee; "/(webusers|bid|buget|COA|drop)/i")
 
 
 /*
@@ -42,18 +34,37 @@ method "_unload"
 	end if
 end method
 
-/* probably should be private method */
-method "init"
-	//include into("/rest/auth_config.text";$config)
-/* The config variable is a simple tab indented list	
+/*	*	*	*Configuration section     *	*	*	*/
+	
+/*The config variable in method "init" is a simple tab indented list	
 	It has two sections Privileges and Roles 
-		Privileges are realy actions, patterned after CRUD. You can define your own actions and map them to CRUD  
-		Roles are user defined names that define what privileges are need for what controllers
+		Privileges are really actions, patterned after CRUD. You can define your own actions and map them to CRUD actions.
+		Roles are user defined names that define what privileges are need for what controllers/models/names.
 		Roles can define a conditinal condition on a controller. It must be an executable string that returns a boolean.
-		variables must also be available. Either session,  passed in a collections (e.g. $attributes) or a global collection.
+		Variables must also be available in either the session, passed in a collections (e.g. $attributes) or a global collection.
 		The controller "all" will give that permission on any action/controller. All can be delared with a condition, say to 
 		have read permission on oll controlers except a, b and c.
-		*/	
+*/	
+	
+	
+/* 
+You can define a contant that can be used in the optional boolean
+conditions. This uses a regex or list.
+There are also constants for where your user.roles array is stored, current user id if used, and where to redirect if unauthorized
+*/
+
+	define(kExcludeEmployee; "/(webusers|bid|buget|COA|drop)/i")
+	define(kRoles;'session{"user.roles"}')
+	define(kCurrentUserID;'session{"user.id"}')
+
+method "_unauthorized"
+	/* modify this method to meet your needs on an unathorized condition */
+	session{"errMsg"} := "Unauthorized Access"
+	redirect("/root/main")
+end method
+
+method "init"
+	//include into("/rest/auth_config.text";$config)
 	
 $config := """
 :privileges
@@ -101,28 +112,26 @@ $config := """
 	citizen
 		permissions_on
 			citizens
-				update:(session{"user.id"} = $attributes{"id"})
+				update:(kCurrentUserID = num($attributes{"id"}))
 	employee
 		permissions_on
 			all
 				read:($controller !~ kExcludeEmployee )
 			employees
 				read
-				me:(session{"user.id"} = $attributes{"id"})
-			projects
-				read
-				manage_project:(auth.hasRole("project_manager"))
+				me:(kCurrentUserID = num($attributes{"id"}))
 	project_manager
 		permissions_on
-			projects
-				manage_project
-			jobs
+			[projects,jobs,jobstages,citizens,stage_assmnts,]
 				manage_project
 	dbadmin
 		permissions_on
 			all
 				manage
-
+	assessment_admin
+		permissions_on
+			[assessments,questions,answers]
+				manage
 """
 	$config := trim($config)
 	$count := regex split("|^\:|m";$config;$keyitems; 0; A4D Regex Split No Empty)
@@ -144,38 +153,50 @@ $config := """
 
 end method
 
-method "isAuthorized"($action;$controller;$attributes;$exclude="")
-	if ($exclude)
+
+/*	*	*	*End Configuration section *	*	*	*/
+
+method "isAuthorized"($action;$controller;$attributes=0;$exclude="")
+	// returns nothing if ok, redirects to error page if unauthorized
+	if (not(kRoles))
+		_unauthorized
+	end if
+	if ($exclude) // can't remember why I added this option, maybe _action calls not cluttering config'
 		if ($action =~ '/$exclude/i')
 			return
 		end if
 	end if
 	$can := auth.hasPrivOn($action;$controller;$attributes)
 	if (not($can))
-		session{"errMsg"} := "Unauthorized Access"
-		redirect("/root/main")
+		_unauthorized
 	end if
-	
 end method
 
 method "hasRole"($role)
+	if (not(kRoles))
+		_unauthorized
+	end if
 	if (not(collection has(self{"_auth"}{"roles"};$role)))
 		return(false)
 	end if
-	$result := $role ~ session{"user.roles"}
+	$result := $role ~ kRoles
 	return($result)
 end method
 
 method "hasPrivOn"($priv;$controller;$attributes=0; $debug=false)
+	if (not(kRoles))
+		_unauthorized		
+	end if
+	
 	$found := false
 	$theController := $controller
-	for each (session{"user.roles"}; $role)
+	for each (kRoles; $role)
 		if (not($found) & (collection has(self{"_auth"}{"roles"}{$role};"all")))
-			/* check valid role for all first check controller if fails*/
+			/* check valid role for all first check if controller fails*/
 			$controller := $theController
 			$chkController := "all"
 		else
-			/* no all role check valid role */
+			/* no all role so check valid role */
 			$controller := "__none__"
 			$chkController := $theController
 		end if
@@ -251,8 +272,19 @@ method "_roles"(&$lines)
 		if ($textstart = 4)
 			$controller := trim(substring($lines{$i};$textstart))
 			array text($tmp;0)
-			
-			self{"_auth"}{"roles"}{$role}{$controller} := $tmp
+			if ($controller[[1]] = "[")
+				$controllers := replace string($controller;"[";"")
+				$controllers := replace string($controllers;"]";"")
+				$cnt := split string($controllers;",";$controllerArray)
+				for ($c; 1; size of array($controllerArray))
+					self{"_auth"}{"roles"}{$role}{trim($controllerArray{$c})} := $tmp
+				end for
+				$hasControllerArray := true
+			else
+				$hasControllerArray := false
+				self{"_auth"}{"roles"}{$role}{$controller} := $tmp
+			end if
+						
 		end if
 		if ($textstart = 5)
 			$priv := trim(substring($lines{$i};$textstart))
@@ -262,10 +294,25 @@ method "_roles"(&$lines)
 				$cnt := split string($priv;":";$privIf)
 				$cpriv := $privIf{1}
 				$cif := $privIf{2}
-				self{"_auth"}{"roles"}{$role}{$controller}{} := $cpriv
-				self{"_auth"}{"roles"}{$role}{$controller+":"+$cpriv} := $cif
+				if ($hasControllerArray)
+					for ($c; 1; size of array($controllerArray))
+						self{"_auth"}{"roles"}{$role}{$controllerArray{$c}}{} := $cpriv
+						self{"_auth"}{"roles"}{$role}{$controllerArray{$c}+":"+$cpriv} := $cif
+						
+					end for
+				else
+					self{"_auth"}{"roles"}{$role}{$controller}{} := $cpriv
+					self{"_auth"}{"roles"}{$role}{$controller+":"+$cpriv} := $cif
+				end if
 			else
-				self{"_auth"}{"roles"}{$role}{$controller}{} := $priv
+				if ($hasControllerArray)
+					for ($c; 1; size of array($controllerArray))
+						self{"_auth"}{"roles"}{$role}{$controllerArray{$c}}{} := $priv
+						
+					end for
+				else
+					self{"_auth"}{"roles"}{$role}{$controller}{} := $priv
+				end if
 			end if
 		end if
 	end for
